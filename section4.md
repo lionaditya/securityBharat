@@ -265,3 +265,299 @@ spring.datasource.password=root12345
 
 server.port=9090
 ```
+# 35) Integrate Microservice
+![alt text](image-76.png)![alt text](image-77.png)![alt text](image-78.png)
+### Model 
+```java
+package com.bharath.spirngcloud.model;
+
+import java.math.BigDecimal;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Transient;
+
+@Entity
+public class Product {
+
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Long id;
+	private String name;
+	private String description;
+	private BigDecimal price;
+	
+	@Transient //WE don't want this field to save in DB
+	private String couponCode;
+	 //WE use this couponCode to fetch the coupon Details
+	  // from CouponService
+	
+	public Long getId() {
+		return id;
+	}
+
+	public String getCouponCode() {
+		return couponCode;
+	}
+
+	public void setCouponCode(String couponCode) {
+		this.couponCode = couponCode;
+	}
+
+	public void setId(Long id) {
+		this.id = id;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+
+	public String getDescription() {
+		return description;
+	}
+
+	public void setDescription(String description) {
+		this.description = description;
+	}
+
+	public BigDecimal getPrice() {
+		return price;
+	}
+
+	public void setPrice(BigDecimal price) {
+		this.price = price;
+	}
+
+}
+```
+### RestTemplate Bean Creation
+```java
+package com.bharath.spirngcloud;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.web.client.RestTemplate;
+
+@SpringBootApplication
+public class Productservice2Application {
+
+	public static void main(String[] args) {
+		SpringApplication.run(Productservice2Application.class, args);
+	}
+	
+	@Bean
+	public RestTemplate restTemplate() {
+		return new RestTemplate();
+	}
+
+}
+```
+### Dto class
+```java
+package com.bharath.spirngcloud.dto;
+
+import java.math.BigDecimal;
+
+public class Coupon {
+
+	private Long id;
+	private String code;
+	private BigDecimal discount;
+	private String expDate;
+
+	public Long getId() {
+		return id;
+	}
+
+	public void setId(Long id) {
+		this.id = id;
+	}
+
+	public String getCode() {
+		return code;
+	}
+
+	public void setCode(String code) {
+		this.code = code;
+	}
+
+	public BigDecimal getDiscount() {
+		return discount;
+	}
+
+	public void setDiscount(BigDecimal discount) {
+		this.discount = discount;
+	}
+
+	public String getExpDate() {
+		return expDate;
+	}
+
+	public void setExpDate(String expDate) {
+		this.expDate = expDate;
+	}
+
+}
+```
+### Controller
+```java
+package com.bharath.spirngcloud.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
+
+import com.bharath.spirngcloud.dto.Coupon;
+import com.bharath.spirngcloud.model.Product;
+import com.bharath.spirngcloud.repos.ProductRepo;
+
+@RestController
+@RequestMapping("/productapi")
+public class ProductRestController {
+	
+	@Autowired
+	ProductRepo repo;
+	
+	@Autowired
+	private RestTemplate restTemplate;
+	
+	@Value("${couponService.url}")
+	private String couponServiceURL;
+	
+	@RequestMapping(value = "/products",method = RequestMethod.POST)
+	public Product create(@RequestBody Product product) {
+		
+		Coupon coupon = restTemplate.getForObject(couponServiceURL+product.getCouponCode(), Coupon.class);
+		
+		product.setPrice(product.getPrice().subtract(coupon.getDiscount()));
+		
+		return repo.save(product);
+	}
+
+}
+```
+### application of Product Service
+```properties
+spring.application.name=productservice2
+
+spring.datasource.url=jdbc:mysql://localhost:3306/mydb1
+spring.datasource.username=root
+spring.datasource.password=root12345
+
+server.port=9090
+
+couponService.url=http://localhost:9091/couponapi/coupons/
+```
+### application of Coupon Service
+```properties
+spring.application.name=couponservice2
+
+spring.datasource.url=jdbc:mysql://localhost:3306/mydb1
+spring.datasource.username=root
+spring.datasource.password=root12345
+
+server.port=9091
+```
+# 40) Refactoring
+### Controller
+```java
+package com.bharath.spirngcloud.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.bharath.spirngcloud.model.Coupon;
+import com.bharath.spirngcloud.repos.CouponRepo;
+
+@RestController
+@RequestMapping("/couponapi") // It map particular URI to API
+public class CouponRestController {
+
+	@Autowired
+	private CouponRepo repo;
+
+	@PostMapping(value = "/coupons")
+	public Coupon create(@RequestBody Coupon coupon) {
+
+		return repo.save(coupon);
+	}
+
+	@GetMapping(value = "/coupons/{code}")
+	public Coupon getCoupon(@PathVariable("code") String code) {
+
+		return repo.findByCode(code);
+	}
+}
+```
+#  Assignment1: Create MS
+![alt text](image-79.png)
+### Controller
+```java
+package com.bharath.spirngcloud.controller;
+
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
+
+import com.bharath.spirngcloud.dto.Coupon;
+import com.bharath.spirngcloud.model.Product;
+import com.bharath.spirngcloud.repos.ProductRepo;
+
+@RestController
+@RequestMapping("/productapi")
+public class ProductRestController {
+	
+	@Autowired
+	ProductRepo repo;
+	
+	@Autowired
+	private RestTemplate restTemplate;
+	
+	@Value("${couponService.url}")
+	private String couponServiceURL;
+	
+	@RequestMapping(value = "/products",method = RequestMethod.POST)
+	public Product create(@RequestBody Product product) {
+		
+		Coupon coupon = restTemplate.getForObject(couponServiceURL+product.getCouponCode(), Coupon.class);
+		
+		product.setPrice(product.getPrice().subtract(coupon.getDiscount()));
+		
+		return repo.save(product);
+	}
+	
+	@GetMapping("/products/{pid}")
+	public Product getProduct(@PathVariable("pid") Long pid) {
+		
+		Optional<Product> product = repo.findById(pid);
+		
+		return product.get();
+	}
+
+}
+```
+
